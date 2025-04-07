@@ -1,0 +1,42 @@
+# Node.js
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+build/
+
+# Optional: Vite cache
+.vite/
+
+# Optional: Nuxt/Vue CLI
+.nuxt/
+.vuepress/
+public/
+.cache/
+.temp/
+
+# Env files
+.env
+.env.*.local
+
+# Editor directories and files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Tailwind JIT cache (если используется)
+.tailwind-cache/
+
+# Coverage (если используешь тесты)
+coverage/
