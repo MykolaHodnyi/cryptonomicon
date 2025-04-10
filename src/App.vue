@@ -1,6 +1,32 @@
 <template>
   <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
     <div class="container">
+      <div
+        v-if="isAppLoading"
+        class="fixed w-100 h-100 opacity-80 bg-purple-800 inset-0 z-50 flex items-center justify-center"
+      >
+        <svg
+          class="animate-spin -ml-1 mr-3 h-12 w-12 text-white"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            class="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            stroke-width="4"
+          ></circle>
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          ></path>
+        </svg>
+      </div>
+
       <section>
         <div class="flex">
           <div class="max-w-xs">
@@ -11,6 +37,7 @@
               <input
                 v-model="ticker"
                 v-on:keydown.enter="add"
+                @input="showHint($event.target.value)"
                 type="text"
                 name="wallet"
                 id="wallet"
@@ -22,27 +49,17 @@
               class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
             >
               <span
+                v-for="hint in hintArr"
+                :key="hint"
+                @click="clickOnHint(hint)"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
-                BTC
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                DOGE
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                BCH
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                CHD
+                {{ hint }}
               </span>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div v-if="showError" class="text-sm text-red-600">
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
@@ -164,28 +181,63 @@ export default {
       tickers: [],
       sel: null,
       graph: [],
+      showError: false,
+      coinList: [],
+      hintArr: [],
+      isAppLoading: true,
     };
   },
+  created() {
+    const tickersData = localStorage.getItem("cryptonomicon-list");
+
+    if (tickersData) {
+      this.tickers = JSON.parse(tickersData);
+
+      this.tickers.forEach((t) => this.subscribeToUpdates(t.name));
+    }
+
+    this.fetchCoinListData();
+  },
   methods: {
+    subscribeToUpdates(tickerName) {
+      try {
+        let intervalId = setInterval(async () => {
+          const fetchData = await fetch(
+            `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=af9ba4d218081ad2a388bbab555d0aa3356b66d57ff187e15b9d6def840294ce`
+          );
+          const data = await fetchData.json();
+          if (data.Response === "Error") {
+            this.tickers.find((t) => t.name === tickerName).price = "Error!";
+            clearInterval(intervalId);
+          } else {
+            this.tickers.find((t) => t.name === tickerName).price =
+              data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+            if (this.sel?.name === tickerName) {
+              this.graph.push(data.USD);
+            }
+          }
+        }, 3000);
+      } catch {
+        console.error("Error loading coin data");
+      }
+    },
     add() {
       const currentTicker = {
         name: this.ticker,
         price: "-",
       };
-      this.tickers.push(currentTicker);
-      setInterval(async () => {
-        const fetchData = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=af9ba4d218081ad2a388bbab555d0aa3356b66d57ff187e15b9d6def840294ce`
+      if (this.tickers.filter((i) => i.name == currentTicker.name).length) {
+        this.showError = true;
+      } else {
+        this.tickers.push(currentTicker);
+
+        localStorage.setItem(
+          "cryptonomicon-list",
+          JSON.stringify(this.tickers)
         );
-        const data = await fetchData.json();
-        // currentTicker.price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-        this.tickers.find((t) => t.name === currentTicker.name).price =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-        if (this.sel?.name === currentTicker.name) {
-          this.graph.push(data.USD);
-        }
-      }, 3000);
-      this.ticker = "";
+
+        this.subscribeToUpdates(currentTicker.name);
+      }
     },
     select(ticker) {
       this.sel = ticker;
@@ -200,6 +252,34 @@ export default {
       return this.graph.map(
         (price) => 5 + ((price - minVal) * 95) / (maxVal - minVal)
       );
+    },
+    async fetchCoinListData() {
+      try {
+        const fetchData = await fetch(
+          "https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=af9ba4d218081ad2a388bbab555d0aa3356b66d57ff187e15b9d6def840294ce"
+        );
+        const data = await fetchData.json();
+        Object.keys(data.Data).forEach((element) => {
+          this.coinList.push(element);
+        });
+        this.isAppLoading = false;
+      } catch {
+        console.error("Error loading coin list data");
+      }
+    },
+    showHint(value) {
+      this.showError = false;
+      if (value.length) {
+        this.hintArr = this.coinList
+          .filter((t) => t.toLowerCase().includes(value.toLowerCase()))
+          .slice(0, 4);
+      } else {
+        this.hintArr = 0;
+      }
+    },
+    clickOnHint(value) {
+      this.ticker = value;
+      this.add();
     },
   },
 };
